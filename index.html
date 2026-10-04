@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SENTINELX Live Demo</title>
+<style>
+:root{--bg:#f4f7fb;--card:#fff;--ink:#0a0a0a;--mut:#555;--navy:#1b3a6b;--teal:#1d9aa0;--line:#e3e9f2;--head:#e8eef7;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1526;--card:#16213a;--ink:#eef2fa;--mut:#a9b6cf;--navy:#2a4f8f;--line:#26334f;--head:#1d2b49}}
+:root[data-theme="dark"]{--bg:#0d1526;--card:#16213a;--ink:#eef2fa;--mut:#a9b6cf;--navy:#2a4f8f;--line:#26334f;--head:#1d2b49}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 Arial,Helvetica,sans-serif}
+header{background:var(--navy);color:#fff;padding:14px 20px}header h1{margin:0;font-size:20px}header small{opacity:.85}
+.row{display:flex;gap:12px;padding:14px 20px;flex-wrap:wrap}.k{flex:1;min-width:130px;background:var(--card);border-radius:8px;padding:10px 12px;box-shadow:0 1px 4px #0003}
+.k small{color:var(--mut)}.k b{display:block;font-size:24px}.ctl{padding:0 20px 8px;color:var(--mut)}select{font:inherit;padding:3px}
+.chips{padding:0 20px 10px;display:flex;gap:8px;flex-wrap:wrap}.chip{background:var(--card);border-radius:14px;padding:3px 10px;box-shadow:0 1px 3px #0003;font-size:12px}
+.wrap{margin:0 20px 16px;overflow-x:auto}table{width:100%;background:var(--card);border-collapse:collapse;box-shadow:0 1px 4px #0003;min-width:640px}
+td,th{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}th{background:var(--head)}
+.s{padding:2px 8px;border-radius:10px;color:#fff;font-size:12px}.critical{background:#d9534f}.high{background:#e8742c}.medium{background:#b88a10}
+.bar{display:inline-block;height:8px;background:var(--teal);border-radius:4px;vertical-align:middle}.ev{color:var(--mut);font-size:12px}
+footer{padding:0 20px 20px;color:var(--mut);font-size:12px}
+</style></head><body>
+<header><h1>SENTINELX &mdash; passive threat detection</h1><small>Read-only ingest &middot; metadata only &middot; streaming &middot; simulated one-way traffic</small></header>
+<div class="row" id="k"></div>
+<div class="ctl">Simulated feed rate: <select id="rate"><option value="300">300 flows/s</option><option value="3000">3,000 flows/s</option><option value="30000">30,000 flows/s</option><option value="300000">300,000 flows/s</option></select></div>
+<div class="chips" id="chips"></div>
+<div class="wrap"><table><thead><tr><th>Time<th>Threat class<th>Severity<th>Confidence<th>Flow<th>Evidence</thead><tbody id="t"></tbody></table></div>
+<footer>In-browser demo of the SENTINELX detection logic on simulated traffic (DDoS, scan, C2 beacon, DNS tunnel, TLS fingerprint, exfiltration injected among normal flows). Nothing is sent anywhere and no payload is ever decrypted.</footer>
+<script>
+const R=Math.random,ri=(a,b)=>Math.floor(R()*(b-a+1))+a,ip=p=>p+'.'+ri(1,254),BAD='e7d705a3286e19ea42f587b344ee6865';
+const ent=a=>{const m=new Map();a.forEach(x=>m.set(x,(m.get(x)||0)+1));let h=0;m.forEach(v=>{const p=v/a.length;h-=p*Math.log2(p)});return h};
+class Feed{constructor(){this.t=0;this.n=0;this.k=0;this.q=[]}
+f(o){this.n++;return Object.assign({ts:this.t,id:'f'+this.n,src:ip('10.0.0'),dst:ip('198.51.100'),dport:443,proto:'tcp',out:ri(300,5000),inn:ri(500,60000),syn:false,qname:null,ja3:null},o)}
+attack(k){const q=this.q;
+if(k=='ddos')for(let i=0;i<300;i++)q.push(this.f({src:ip(ri(11,199)+'.'+ri(1,254)),dst:'198.51.100.10',dport:80,syn:true,out:60,inn:0}));
+if(k=='scan')for(let p=20;p<80;p++)q.push(this.f({src:'203.0.113.77',dst:'10.0.0.5',dport:p,syn:true,out:60,inn:0}));
+if(k=='dns')for(let i=0;i<12;i++){let l='';for(let j=0;j<40;j++)l+='abcdefghijklmnopqrstuvwxyz234567'[ri(0,31)];q.push(this.f({src:'10.0.0.31',dst:'198.51.100.53',dport:53,proto:'udp',out:120,inn:200,qname:l+'.evil-cdn.net'}))}
+if(k=='tls')q.push(this.f({src:'10.0.0.22',ja3:BAD}));
+if(k=='exfil')q.push(this.f({src:'10.0.0.40',dst:'192.0.2.99',out:8e7,inn:2e4}))}
+next(){this.t+=.005;this.k++;
+if(this.k%400==0)this.q.unshift(this.f({src:'10.0.0.66',dst:'198.51.100.9',out:200,inn:150}));
+if(this.k%1200==0)this.attack(['ddos','scan','dns','tls','exfil'][(this.k/1200-1)%5]);
+if(this.q.length){const f=this.q.shift();f.ts=this.t;return f}
+if(R()<.05)return this.f({dport:53,proto:'udp',qname:['www.google.com','mail.example.org','cdn.wikipedia.org'][ri(0,2)],out:80,inn:160});
+return this.f()}}
+class Det{constructor(){this.syn=new Map();this.fan=new Map();this.beat=new Map();this.cool=new Map()}
+g(m,k){let v=m.get(k);if(!v){v=[];m.set(k,v)}return v}
+em(f,cls,sev,conf,ev,key){const k=cls+'|'+key;if(f.ts-(this.cool.get(k)??-99)<10)return[];this.cool.set(k,f.ts);return[{time:new Date().toISOString().slice(11,23),id:f.id,cls,sev,conf:Math.round(Math.min(.99,conf)*100)/100,ev}]}
+run(f){const o=[],now=f.ts;
+if(f.syn&&f.inn===0){const w=this.g(this.syn,f.dst);w.push([now,f.src]);while(w[0][0]<now-2)w.shift();
+const s=w.map(x=>x[1]),u=new Set(s).size;
+if(w.length>=150&&u/w.length>.8)o.push(...this.em(f,'ddos_syn_flood','critical',.6+.4*u/w.length,{syn_flows_2s:w.length,unique_sources:u,source_entropy_bits:+ent(s).toFixed(2)},f.dst));
+const q=this.g(this.fan,f.src);q.push([now,f.dst,f.dport]);while(q[0][0]<now-5)q.shift();
+const p=new Set(q.map(x=>x[2])).size,h=new Set(q.map(x=>x[1])).size;
+if(p>=25||h>=25)o.push(...this.em(f,'port_scan','high',.5+Math.max(p,h)/100,{distinct_ports:p,distinct_hosts:h,window_s:5},f.src))}
+const b=this.g(this.beat,f.src+'>'+f.dst);b.push(now);if(b.length>8)b.shift();
+if(b.length>=6){const gp=[];for(let i=0;i<b.length-1;i++)gp.push(b[i+1]-b[i]);const m=gp.reduce((a,c)=>a+c,0)/gp.length;
+const cv=m>0?Math.sqrt(gp.reduce((a,c)=>a+(c-m)**2,0)/gp.length)/m:9;
+if(m>=1&&cv<.1)o.push(...this.em(f,'c2_beaconing','high',1-cv,{mean_interval_s:+m.toFixed(2),interval_cv:+cv.toFixed(3),samples:b.length},f.src+f.dst))}
+if(f.qname){const l=f.qname.split('.')[0],H=ent([...l]);if(l.length>=24&&H>3.3)o.push(...this.em(f,'dns_tunnel_dga','medium',H/5,{qname_len:f.qname.length,label_entropy_bits:+H.toFixed(2)},f.src))}
+if(f.ja3===BAD)o.push(...this.em(f,'malware_tls_fingerprint','high',.9,{ja3:f.ja3,match:'blocklist'},f.src));
+const r=f.out/Math.max(f.inn,1);
+if(r>100&&f.out>5e6)o.push(...this.em(f,'data_exfiltration','critical',.6+Math.log10(r)/10,{bytes_out:f.out,bytes_in:f.inn,out_in_ratio:Math.round(r)},f.src));
+return o}}
+const feed=new Feed(),det=new Det(),A=[],C={};let flows=0,alerts=0,busy=0,mark=performance.now(),mflows=0,fps=0,lat=0;
+const $=id=>document.getElementById(id),e=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+setInterval(()=>{const n=Math.max(1,Math.round(+$('rate').value/20)),t0=performance.now();
+for(let i=0;i<n;i++){for(const a of det.run(feed.next())){A.unshift(a);alerts++;C[a.cls]=(C[a.cls]||0)+1}}
+if(A.length>200)A.length=200;busy+=performance.now()-t0;flows+=n;
+const now=performance.now();if(now-mark>=1000){fps=Math.round((flows-mflows)/((now-mark)/1000));lat=busy*1000/Math.max(flows-mflows,1);busy=0;mflows=flows;mark=now}},50);
+setInterval(()=>{$('k').innerHTML=[['Flows processed',flows.toLocaleString()],['Flows/sec (measured)',fps.toLocaleString()],['Alerts raised',alerts],['Avg per-flow processing',lat.toFixed(2)+' \u00b5s']].map(x=>`<div class="k"><small>${x[0]}</small><b>${x[1]}</b></div>`).join('');
+$('chips').innerHTML=Object.entries(C).map(([k,v])=>`<span class="chip">${e(k)}: <b>${v}</b></span>`).join('');
+$('t').innerHTML=A.slice(0,40).map(a=>`<tr><td>${e(a.time)}<td><b>${e(a.cls)}</b><td><span class="s ${e(a.sev)}">${e(a.sev)}</span><td><span class="bar" style="width:${a.conf*80}px"></span> ${a.conf}<td>${e(a.id)}<td class="ev">${e(JSON.stringify(a.ev))}`).join('')},500);
+</script></body></html>
